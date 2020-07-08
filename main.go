@@ -10,11 +10,11 @@ func PrintUsage() {
 	fmt.Printf("\nUsages:\n\n")
 	switch runtime.GOOS {
 	case "darwin":
-		fmt.Printf("\tgo mod graph | modv | dot -T svg | open -f -a /System/Applications/Preview.app")
+		fmt.Printf("\tgo mod graph | modv <target-mod> | dot -T svg | open -f -a /System/Applications/Preview.app")
 	case "linux":
-		fmt.Printf("\tgo mod graph | modv | dot -T svg -o /tmp/modv.svg | xdg-open /tmp/modv.svg")
+		fmt.Printf("\tgo mod graph | modv <target-mod> | dot -T svg -o /tmp/modv.svg | xdg-open /tmp/modv.svg")
 	case "windows":
-		fmt.Printf("\tgo mod graph | modv | dot -T png -o graph.png; start graph.png")
+		fmt.Printf("\tgo mod graph | modv <target-mod> | dot -T png -o graph.png; start gra<target-mod> ph.png")
 	}
 
 	fmt.Printf("\n\n")
@@ -22,6 +22,7 @@ func PrintUsage() {
 
 func main() {
 	info, err := os.Stdin.Stat()
+
 	if err != nil {
 		fmt.Println("os.Stdin.Stat:", err)
 		PrintUsage()
@@ -34,6 +35,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	args := os.Args[1:]
+	if len(args) > 2 {
+		fmt.Println("args > 2")
+		PrintUsage()
+		os.Exit(1)
+	}
+
 	mg := NewModuleGraph(os.Stdin)
 	if err := mg.Parse(); err != nil {
 		fmt.Println("mg.Parse: ", err)
@@ -41,7 +49,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mg.Render(os.Stdout); err != nil {
+	var target string
+	if len(args) == 1 {
+		target = args[0]
+	}
+	if err := mg.Render(os.Stdout, target); err != nil {
 		fmt.Println("mg.Render: ", err)
 		PrintUsage()
 		os.Exit(1)
