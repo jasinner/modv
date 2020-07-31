@@ -49,11 +49,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	var target string
 	if len(args) == 1 {
-		target = args[0]
+		target := args[0]
+		if err := mg.Filter(target); err != nil {
+			fmt.Println("mg.Filter: ", err)
+			PrintUsage()
+			os.Exit(1)
+		}
 	}
-	if err := mg.Render(os.Stdout, target); err != nil {
+
+	if err := mg.Render(os.Stdout); err != nil {
 		fmt.Println("mg.Render: ", err)
 		PrintUsage()
 		os.Exit(1)

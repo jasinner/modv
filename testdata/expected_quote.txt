@@ -1,0 +1,6 @@
+digraph {
+node [shape=box];
+1 [label="github.com/poloxue/testmod"];
+2 [label="rsc.io/quote/v3"]
+1 -> 2;
+}

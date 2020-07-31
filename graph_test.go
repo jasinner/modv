@@ -1,63 +1,48 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
-	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
+	"os"
 	"testing"
 )
 
-func TestModuleGraph_Parse(t *testing.T) {
-	type args struct {
-		reader io.Reader
-	}
-	tests := []struct {
-		name string
-		args args
-		want []byte
-	}{
-		{
-			name: "full",
-			args: args{
-				bytes.NewReader([]byte(`github.com/poloxue/testmod golang.org/x/text@v0.3.2
-github.com/poloxue/testmod rsc.io/quote/v3@v3.1.0
-github.com/poloxue/testmod rsc.io/sampler@v1.3.1
-golang.org/x/text@v0.3.2 golang.org/x/tools@v0.0.0-20180917221912-90fa682c2a6e
-rsc.io/quote/v3@v3.1.0 rsc.io/sampler@v1.3.0
-rsc.io/sampler@v1.3.1 golang.org/x/text@v0.0.0-20170915032832-14c0d48ead0c
-rsc.io/sampler@v1.3.0 golang.org/x/text@v0.0.0-20170915032832-14c0d48ead0c`))},
-			want: []byte(`digraph {
-node [shape=box];
-1 [label="github.com/poloxue/testmod"];
-2 [label="golang.org/x/text@v0.3.2"];
-3 [label="rsc.io/quote/v3@v3.1.0"];
-4 [label="rsc.io/sampler@v1.3.1"];
-5 [label="golang.org/x/tools@v0.0.0-20180917221912-90fa682c2a6e"];
-6 [label="rsc.io/sampler@v1.3.0"];
-7 [label="golang.org/x/text@v0.0.0-20170915032832-14c0d48ead0c"]
-1 -> 2;
-1 -> 3;
-1 -> 4;
-2 -> 5;
-3 -> 6;
-4 -> 7;
-6 -> 7;
-}`),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			moduleGraph := NewModuleGraph(tt.args.reader)
-			moduleGraph.Parse()
-			for k, v := range moduleGraph.Mods {
-				fmt.Println(v, k)
-			}
+var Reader io.Reader
 
-			for k, v := range moduleGraph.Dependencies {
-				fmt.Println(k)
-				fmt.Println(v)
-				fmt.Println()
-			}
-		})
+func TestMain(m *testing.M) {
+	var err error
+	Reader, err = os.Open("testdata/testmod.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	m.Run()
+}
+
+func TestEmptyTarget(t *testing.T) {
+	DoTest(t, "testdata/expected_no_target.txt", "")
+}
+
+func TestQuote(t *testing.T) {
+	DoTest(t, "testdata/expected_quote.txt", "rsc.io/quote/v3")
+}
+
+func DoTest(t *testing.T, expected string, target string) {
+	expectedBytes, err := ioutil.ReadFile(expected)
+	if err != nil {
+		log.Fatal(err)
+	}
+	moduleGraph := NewModuleGraph(Reader)
+	moduleGraph.Parse()
+	var results bytes.Buffer
+	w := bufio.NewWriter(&results)
+	moduleGraph.Render(w)
+	moduleGraph.Filter(target)
+	w.Flush()
+	if !bytes.Equal(results.Bytes(), expectedBytes) {
+		t.Logf("expected: %v", string(expectedBytes))
+		t.Errorf("result: %v", string(results.Bytes()))
 	}
 }

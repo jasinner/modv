@@ -3,10 +3,13 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"text/template"
+
+	"github.com/elliotchance/orderedmap"
 )
 
 var graphTemplate = `digraph {
@@ -15,50 +18,42 @@ var graphTemplate = `digraph {
 rankdir=LR;
 {{ end -}}
 node [shape=box];
-{{ range $mod, $modId := .mods -}}
-{{ $modId }} [label="{{ $mod.Print }}"];
+{{ range $mod := $mods.Keys -}}
+{{ $mods.GetOrDefault $mod "" }} [label="{{ $mod }}"];
 {{ end -}}
 
 {{- range $dep := .dependencies -}}
 {{ $dep.Print $mods }}
 {{ end -}}
-}
-`
+}`
 
-type Module struct {
-	Name    string
-	Version string
-}
-
-func NewModule(s string) Module {
+func NewModule(s string) string {
 	modParts := strings.Split(s, "@")
-	if len(modParts) > 1 {
-		return Module{modParts[0], modParts[1]}
+	if len(modParts) == 0 {
+		errors.New("Delimeter @ not found in module")
 	}
-	return Module{modParts[0], ""}
-}
-
-func (m Module) Print() string {
-	return fmt.Sprintf("%v\n%v", m.Name, m.Version)
+	return modParts[0]
 }
 
 type Dependency struct {
-	Module Module
-	Next   *Module
+	Module string
+	Next   *string
 }
 
-func NewDependency(module Module, next *Module) Dependency {
+func NewDependency(module string, next *string) Dependency {
 	return Dependency{module, next}
 }
 
-func (d Dependency) Print(mods map[Module]int) string {
-	return fmt.Sprintf("%d -> %d", mods[d.Module], mods[*d.Next])
+func (d Dependency) Print(mods orderedmap.OrderedMap) string {
+	mod := mods.GetOrDefault(d.Module, "")
+	next := mods.GetOrDefault(*d.Next, "")
+	return fmt.Sprintf("%d -> %d", mod, next)
 }
 
 type ModuleGraph struct {
 	Reader io.Reader
 
-	Mods         map[Module]int
+	Mods         *orderedmap.OrderedMap
 	Dependencies []Dependency
 }
 
@@ -66,7 +61,7 @@ func NewModuleGraph(r io.Reader) *ModuleGraph {
 	return &ModuleGraph{
 		Reader: r,
 
-		Mods:         make(map[Module]int),
+		Mods:         orderedmap.NewOrderedMap(),
 		Dependencies: make([]Dependency, 0),
 	}
 }
@@ -90,36 +85,44 @@ func (m *ModuleGraph) Parse() error {
 		module := NewModule(mod)
 		depModule := NewModule(depMod)
 
-		modID, ok := m.Mods[module]
+		modID, ok := m.Mods.Get(module)
 		if !ok {
 			modID = serialID
-			m.Mods[module] = modID
+			m.Mods.Set(module, modID)
 			serialID++
 		}
 
-		depModID, ok := m.Mods[depModule]
+		depModID, ok := m.Mods.Get(depModule)
 		if !ok {
 			depModID = serialID
-			m.Mods[depModule] = depModID
-			serialID += 1
+			m.Mods.Set(depModule, depModID)
+			serialID++
 		}
 		dependency := NewDependency(module, &depModule)
 		m.Dependencies = append(m.Dependencies, dependency)
 	}
 }
 
-func (m *ModuleGraph) Render(w io.Writer, target string) error {
-	templ, err := template.New("graph").Parse(graphTemplate)
-	//_, err := template.New("graph").Parse(graphTemplate)
-	if err != nil {
-		return fmt.Errorf("templ.Parse: %v", err)
+func (m *ModuleGraph) Filter(target string) error {
+	fmt.Printf("target: %v", target)
+
+	filteredModules := orderedmap.NewOrderedMap()
+
+	_, ok := m.Mods.Get(target)
+	if !ok {
+		fmt.Println("couldn't find target")
+		return nil
 	}
+	fmt.Println("found target")
 
-	//fmt.Printf("target: %v", target)
-
-	//if target != "" {
-	//	filteredModules := make(map[string]int)
-
+	topMod := m.Mods.Front()
+	filteredModules.Set(topMod, 1)
+	for mod := topMod; mod != nil; mod = mod.Next() {
+		if mod.Key == target {
+			filteredModules.Set(mod.Key, mod.Value)
+		}
+	}
+	m.Mods = filteredModules
 	//	for mod, index := range m.Mods {
 	//		parts := strings.Split(mod, "\n")
 	//		if parts[0] == target {
@@ -130,10 +133,15 @@ func (m *ModuleGraph) Render(w io.Writer, target string) error {
 
 	//fmt.Printf("filtered modules: %v", filteredModules)
 	//}
+	return nil
+}
 
-	//Need to loop through again, or add this to the template
-	//mod = strings.Replace(mod, "@", "\n", 1)
-	//depMod = strings.Replace(depMod, "@", "\n", 1)
+func (m *ModuleGraph) Render(w io.Writer) error {
+	templ, err := template.New("graph").Parse(graphTemplate)
+
+	if err != nil {
+		return fmt.Errorf("templ.Parse: %v", err)
+	}
 
 	var direction string
 	if len(m.Dependencies) > 15 {
