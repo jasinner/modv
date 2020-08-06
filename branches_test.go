@@ -1,68 +1,57 @@
-package branches
+package main
 
 import (
-	"bufio"
-	"encoding/gob"
-	"io"
 	"log"
 	"os"
 	"reflect"
 	"testing"
 )
 
-var reader io.Reader
+var moduleGraph *ModGraph
 
-//TODO move to utils
-// Marshal is a function that marshals the object into an
-// io.Writer.
-// By default, it uses the GOB encoder
-func Save(v interface{}, path string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	w := bufio.NewWriter(f)
-	e := gob.NewEncoder(w)
-
-	err = e.Encode(v)
-	if err != nil {
-		return err
-	}
-	w.Flush()
-	return nil
-}
-
-//TODO move to utils
-// Unmarshal is a function that unmarshals the data from the
-// reader into the specified value.
-// By default, it uses the JSON unmarshaller.
-func Load(path string, v interface{}) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	r := bufio.NewReader(f)
-	d := gob.NewDecoder(r)
-
-	err = d.Decode(v)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func TestParse(t *testing.T) {
+//TODO fix me so this is an actual setup method
+func TestMain(m *testing.M) {
 	reader, err := os.Open("testdata/testmod.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	moduleGraph := NewModuleGraph(reader)
+	moduleGraph = NewModuleGraph(reader)
 	moduleGraph.Parse()
+	m.Run()
+}
 
+func TestParse(t *testing.T) {
+	//TODO change this back to a series of decending branches
+	doTest("testdata/expected_branches.gob", t)
+}
+
+func TestFilterRoot(t *testing.T) {
+	err := moduleGraph.Filter(newModule("github.com/poloxue/testmod"))
+	if err == nil {
+		t.Logf("Expected a root module error")
+		t.Fail()
+	}
+}
+
+func TestFilterDirectDep(t *testing.T) {
+	moduleGraph.Filter(newModule("rsc.io/sampler@v1.3.1"))
+	doTest("testdata/expected_direct.gob", t)
+}
+
+func TestFilterNestedDep(t *testing.T) {
+	moduleGraph.Filter(newModule("golang/x/fiction@v0.1.1"))
+	doTest("testdata/expectedNestedDep.gob", t)
+}
+
+func TestFilterShort(t *testing.T) {
+	moduleGraph.FilterShort(newModule("golang/x/fiction@v0.1.1"))
+	doTest("testdata/expectedNestedShort.gob", t)
+}
+
+func doTest(expected string, t *testing.T) {
 	expectedBranches := make(map[Module][]Module, 0)
-
-	err = Load("testdata/expected_branches.gob", &expectedBranches)
+	err := Load(expected, &expectedBranches)
 	if err != nil {
 		t.Error(err)
 	}

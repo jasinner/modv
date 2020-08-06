@@ -16,8 +16,8 @@ type Module struct {
 }
 
 //NewModule creates a new golang module
-func newModule(bytes []byte) Module {
-	modParts := strings.Split(string(bytes), "@")
+func newModule(input string) Module {
+	modParts := strings.Split(input, "@")
 	parent := strings.TrimSpace(modParts[0])
 	if len(modParts) < 2 {
 		return Module{parent, "", true}
@@ -59,7 +59,7 @@ func NewModuleGraph(r io.Reader) *ModGraph {
 }
 
 func addModule(uniqModules map[Module]bool, bytes []byte) Module {
-	next := newModule(bytes)
+	next := newModule(string(bytes))
 	if !uniqModules[next] {
 		uniqModules[next] = true
 	}
@@ -93,12 +93,47 @@ func (m *ModGraph) Parse() error {
 		} else {
 			branch, ok := m.branches[*relation.parent]
 			if ok {
-				delete(m.branches, *relation.parent)
+				//delete(m.branches, *relation.parent)
 				m.branches[*relation.dependant] = append(branch, *relation.parent)
 			} else {
 				return fmt.Errorf("Didn't find branch with leaf: %v", *relation.parent)
 			}
 		}
+	}
+	return nil
+}
+
+//Filter takes a target module and returns a single branch from the root module
+func (m *ModGraph) Filter(target Module) error {
+	if target.IsRoot {
+		return fmt.Errorf("Target module cannot be a root module")
+	}
+	branch, ok := m.branches[target]
+	if ok {
+		filteredBranches := map[Module][]Module{
+			target: branch,
+		}
+		m.branches = filteredBranches
+	} else {
+		fmt.Printf("Did not find target %v as leaf in branches", target)
+	}
+	return nil
+}
+
+//FilterShort takes a target module and builds a single branch from the root module  it's direct parent and itself
+func (m *ModGraph) FilterShort(target Module) error {
+	if target.IsRoot {
+		return fmt.Errorf("Target module cannot be a root module")
+	}
+	branch, ok := m.branches[target]
+	if ok {
+		root := branch[0]
+		directDep := branch[len(branch)-1]
+		m.branches = map[Module][]Module{
+			target: []Module{root, directDep},
+		}
+	} else {
+		fmt.Printf("Did not find target %v as leaf in branches", target)
 	}
 	return nil
 }

@@ -1,6 +1,1 @@
-digraph {
-node [shape=box];
-1 [label="github.com/poloxue/testmod"];
-2 [label="rsc.io/quote/v3"]
-1 -> 2;
-}
+github.com/poloxue/testmod rsc.io/quote/v3:v3.1.0
