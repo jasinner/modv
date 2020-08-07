@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 )
 
@@ -46,6 +47,7 @@ func (r relation) String() string {
 //ModGraph represents a golang module graph as a tree
 type ModGraph struct {
 	Reader   io.Reader
+	name     string
 	branches map[Module][]Module
 }
 
@@ -55,6 +57,7 @@ func NewModuleGraph(r io.Reader) *ModGraph {
 	return &ModGraph{
 		Reader:   r,
 		branches: make(map[Module][]Module, 0),
+		name:     "",
 	}
 }
 
@@ -82,6 +85,9 @@ func (m *ModGraph) Parse() error {
 
 		line := bytes.Split(relationBytes, []byte(" "))
 		parent := addModule(uniqModules, line[0])
+		if m.name == "" {
+			m.name = strings.Replace(parent.Name, "/", "-", -1)
+		}
 		dependant := addModule(uniqModules, line[1])
 
 		relations = append(relations, relation{&parent, &dependant})
@@ -96,7 +102,9 @@ func (m *ModGraph) Parse() error {
 				//delete(m.branches, *relation.parent)
 				m.branches[*relation.dependant] = append(branch, *relation.parent)
 			} else {
-				return fmt.Errorf("Didn't find branch with leaf: %v", *relation.parent)
+				//This can happen because of test dependencies or buildtags, see https://github.com/golang/go/issues/27900
+				//ignore the module for now, and print a warning
+				log.Printf("Didn't find branch with leaf: %v", *relation.parent)
 			}
 		}
 	}
@@ -110,10 +118,9 @@ func (m *ModGraph) Filter(target Module) error {
 	}
 	branch, ok := m.branches[target]
 	if ok {
-		filteredBranches := map[Module][]Module{
+		m.branches = map[Module][]Module{
 			target: branch,
 		}
-		m.branches = filteredBranches
 	} else {
 		fmt.Printf("Did not find target %v as leaf in branches", target)
 	}
@@ -127,10 +134,17 @@ func (m *ModGraph) FilterShort(target Module) error {
 	}
 	branch, ok := m.branches[target]
 	if ok {
-		root := branch[0]
-		directDep := branch[len(branch)-1]
-		m.branches = map[Module][]Module{
-			target: []Module{root, directDep},
+		length := len(branch)
+		if length > 2 {
+			root := branch[0]
+			directDep := branch[length-1]
+			m.branches = map[Module][]Module{
+				target: []Module{root, directDep},
+			}
+		} else {
+			m.branches = map[Module][]Module{
+				target: branch,
+			}
 		}
 	} else {
 		fmt.Printf("Did not find target %v as leaf in branches", target)

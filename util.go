@@ -42,3 +42,16 @@ func Load(path string, v interface{}) error {
 	}
 	return nil
 }
+
+//IsDir checks is a path is a directory
+func IsDir(path string) (bool, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	mode := fi.Mode()
+	if mode.IsDir() {
+		return true, nil
+	}
+	return false, nil
+}

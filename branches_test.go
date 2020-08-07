@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -47,6 +48,11 @@ func TestFilterNestedDep(t *testing.T) {
 func TestFilterShort(t *testing.T) {
 	moduleGraph.FilterShort(newModule("golang/x/fiction@v0.1.1"))
 	doTest("testdata/expectedNestedShort.gob", t)
+}
+
+func TestFilterShortDirect(t *testing.T) {
+	moduleGraph.FilterShort(newModule("rsc.io/sampler@v1.3.1"))
+	fmt.Println(moduleGraph.branches)
 }
 
 func doTest(expected string, t *testing.T) {
